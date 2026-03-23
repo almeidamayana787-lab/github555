@@ -1,0 +1,61 @@
+# Compila o Nubank-Clone (Flutter) em .ipa SEM assinatura.
+# Assinatura via Sideloadly no PC (Apple ID).
+
+name: iOS IPA (Flutter)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.x"
+          channel: stable
+          cache: true
+
+      - name: Flutter version
+        run: flutter --version
+
+      - name: Pub get
+        run: flutter pub get
+
+      - name: CocoaPods
+        run: |
+          cd ios && pod install
+
+      - name: Build iOS (unsigned xcarchive)
+        run: flutter build ipa --no-codesign
+
+      - name: Pack IPA
+        run: |
+          set -euo pipefail
+          ARCHIVE="$GITHUB_WORKSPACE/build/ios/archive"
+          APP=$(find "$ARCHIVE" -name "Runner.app" -path "*/Products/Applications/*" 2>/dev/null | head -1)
+          if [ -z "${APP:-}" ]; then
+            echo "::error::Runner.app não encontrado em build/ios/archive/"
+            find "$ARCHIVE" -type d 2>/dev/null || true
+            exit 1
+          fi
+          rm -rf "$GITHUB_WORKSPACE/Payload" "$GITHUB_WORKSPACE/NubankClone.ipa"
+          mkdir -p "$GITHUB_WORKSPACE/Payload"
+          cp -R "$APP" "$GITHUB_WORKSPACE/Payload/"
+          cd "$GITHUB_WORKSPACE"
+          zip -q -r NubankClone.ipa Payload
+          rm -rf Payload
+          ls -la NubankClone.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: nubank-clone-ios-ipa
+          path: NubankClone.ipa
